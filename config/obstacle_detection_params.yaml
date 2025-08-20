@@ -21,7 +21,8 @@ obstacle_detector:
     # =============== ROS2 Topic Configuration ===============
     # Input topics - data sources for obstacle detection
     scan_topic: "/scan"                    # LaserScan input topic (LiDAR data)
-    odom_topic: "/pf/pose/odom"              # Robot odometry/pose input topic
+    # odom_topic: "/pf/pose/odom"              # Robot odometry/pose input topic
+    odom_topic: "/ego_racecar/odom"              # Robot odometry/pose input topic
     map_topic: "/obstacle_map"                   # Static environment map topic
     
     # Output topics - obstacle detection results

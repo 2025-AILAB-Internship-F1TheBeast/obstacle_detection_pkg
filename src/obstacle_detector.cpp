@@ -476,41 +476,56 @@ obstacle_detection_pkg::msg::ObstacleArray ObstacleDetector::createObstacleMessa
 {
     obstacle_detection_pkg::msg::ObstacleArray msg;
     msg.header.stamp = this->now();
-    msg.header.frame_id = global_frame_id_;
+    msg.header.frame_id = robot_frame_id_;
     msg.total_obstacles = clusters.size();
+    
+    if (!latest_pose_) {
+        return msg;
+    }
+    
+    // Get robot pose for coordinate transformation
+    double robot_x = latest_pose_->pose.pose.position.x;
+    double robot_y = latest_pose_->pose.pose.position.y;
+    
+    // Extract yaw from quaternion
+    tf2::Quaternion q;
+    tf2::fromMsg(latest_pose_->pose.pose.orientation, q);
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
     
     for (const auto& cluster : clusters) {
         obstacle_detection_pkg::msg::Obstacle obstacle;
         
-        // Calculate centroid
+        // Calculate centroid in global coordinates
         double sum_x = 0.0, sum_y = 0.0;
         for (const auto& point : cluster) {
             sum_x += point.x;
             sum_y += point.y;
         }
         
-        obstacle.position.x = sum_x / cluster.size();
-        obstacle.position.y = sum_y / cluster.size();
+        double global_x = sum_x / cluster.size();
+        double global_y = sum_y / cluster.size();
+        
+        // Transform from global to robot coordinates
+        double rel_x = global_x - robot_x;
+        double rel_y = global_y - robot_y;
+        
+        obstacle.position.x = rel_x * cos(-yaw) - rel_y * sin(-yaw);
+        obstacle.position.y = rel_x * sin(-yaw) + rel_y * cos(-yaw);
         obstacle.position.z = 0.0;
         
-        // Calculate approximate size (max distance from centroid)
+        // Calculate approximate size (max distance from centroid in global coords)
         double max_dist = 0.0;
         for (const auto& point : cluster) {
-            double dist = sqrt(pow(point.x - obstacle.position.x, 2) + 
-                              pow(point.y - obstacle.position.y, 2));
+            double dist = sqrt(pow(point.x - global_x, 2) + 
+                              pow(point.y - global_y, 2));
             max_dist = std::max(max_dist, dist);
         }
         obstacle.size = max_dist;
         
-        // Calculate distance from robot to obstacle
-        if (latest_pose_) {
-            double robot_x = latest_pose_->pose.pose.position.x;
-            double robot_y = latest_pose_->pose.pose.position.y;
-            obstacle.distance = sqrt(pow(obstacle.position.x - robot_x, 2) + 
-                                   pow(obstacle.position.y - robot_y, 2));
-        } else {
-            obstacle.distance = 0.0;
-        }
+        // Calculate distance from robot to obstacle (now just the magnitude in robot frame)
+        obstacle.distance = sqrt(pow(obstacle.position.x, 2) + 
+                               pow(obstacle.position.y, 2));
         
         obstacle.point_count = cluster.size();
         
